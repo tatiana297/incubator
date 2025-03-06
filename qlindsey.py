@@ -6,6 +6,7 @@ import random, string
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 
 from cryptography.fernet import Fernet
@@ -14,14 +15,12 @@ from cryptography.fernet import Fernet
 # Page Config & CSS
 # =============================================================================
 
-# 1. Set a page configuration (title, icon, layout) – sidebar removed
 st.set_page_config(
     page_title="Innovative Data Sharing",
     page_icon=":bank:",
     layout="wide"
 )
 
-# 2. Inject custom CSS for main layout and to enlarge the Start button
 custom_css = """
 <style>
 /* Main container width */
@@ -91,12 +90,26 @@ def apply_differential_privacy(data, epsilon):
         noisy_data[col] = noisy_data[col] + noise
     return noisy_data
 
-def run_clustering(data, n_clusters):
-    """Run KMeans clustering on PE assets."""
+def run_clustering_auto(data, cluster_range=(2, 6)):
+    """
+    Automatically determine the optimal number of clusters using silhouette score.
+    """
     features = data[['Expected Return (%)', 'Volatility (%)']]
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-    data['Cluster'] = kmeans.fit_predict(features).astype(str)
-    return data, kmeans
+    best_score = -1
+    best_k = cluster_range[0]
+    best_kmeans = None
+
+    for k in range(cluster_range[0], cluster_range[1] + 1):
+        kmeans = KMeans(n_clusters=k, random_state=42)
+        labels = kmeans.fit_predict(features)
+        score = silhouette_score(features, labels)
+        if score > best_score:
+            best_score = score
+            best_k = k
+            best_kmeans = kmeans
+    
+    data['Cluster'] = best_kmeans.labels_.astype(str)
+    return data, best_kmeans, best_k
 
 def train_pe_model(data, model_type="Random Forest"):
     """
@@ -204,6 +217,33 @@ def plot_prediction_scatter(data, y_pred):
     plt.tight_layout()
     return fig
 
+def plot_residuals(data, y_pred):
+    """Plot residuals (difference between actual and predicted IRR)."""
+    fig, ax = plt.subplots(figsize=(8,5))
+    residuals = data['IRR (%)'] - y_pred
+    ax.scatter(y_pred, residuals, color='#34495E', alpha=0.6)
+    ax.axhline(0, color='red', linestyle='--')
+    ax.set_xlabel("Predicted IRR (%)", fontsize=12)
+    ax.set_ylabel("Residuals", fontsize=12)
+    ax.set_title("Residual Plot", fontsize=14)
+    ax.grid(True, linestyle='--', alpha=0.5)
+    plt.tight_layout()
+    return fig
+
+def plot_correlation_heatmap(data):
+    """Plot a heatmap of feature correlations."""
+    fig, ax = plt.subplots(figsize=(6,5))
+    corr = data[['Expected Return (%)', 'Volatility (%)', 'IRR (%)', 'MOIC', 'Risk Rating']].corr()
+    cax = ax.matshow(corr, cmap='coolwarm')
+    fig.colorbar(cax)
+    ax.set_xticks(range(len(corr.columns)))
+    ax.set_yticks(range(len(corr.columns)))
+    ax.set_xticklabels(corr.columns, rotation=90)
+    ax.set_yticklabels(corr.columns)
+    ax.set_title("Correlation Heatmap", pad=20)
+    plt.tight_layout()
+    return fig
+
 def encryption_demo(text):
     """Demonstrate encryption and decryption for sensitive data."""
     key = Fernet.generate_key()
@@ -216,7 +256,6 @@ def encryption_demo(text):
 # Navigation & State Management
 # =============================================================================
 
-# Initialize session state for page and verification flag
 if "page" not in st.session_state:
     st.session_state.page = "title"
 if "audit_log" not in st.session_state:
@@ -227,19 +266,19 @@ if "verified" not in st.session_state:
 def go_to(page_name):
     st.session_state.page = page_name
     add_audit_log(f"Navigated to {page_name} page")
-    # Reset verification flag when going back to captcha if needed
     if page_name == "captcha":
         st.session_state.verified = False
 
 def render_top_nav():
     """Render a top navigation bar with buttons for the main pages."""
     cols = st.columns(5)
-    if cols[0].button("Hub"):
-         go_to("hub")
-    if cols[1].button("Onboarding"):
+    
+    if cols[0].button("Onboarding"):
          go_to("onboarding")
-    if cols[2].button("Analysis"):
+    if cols[1].button("Analysis"):
          go_to("analysis")
+    if cols[2].button("Review"):
+         go_to("review")
     if cols[3].button("Code Overview"):
          go_to("code_overview")
     if cols[4].button("Conclusion"):
@@ -250,64 +289,98 @@ def render_top_nav():
 # =============================================================================
 
 def title_page():
-    # Display logo and welcome text
-    logo_path = logo_path = "logo.jpg"
-    st.image(logo_path, width=150)
+    logo_path = "/Users/aurora.ambrosoni/Desktop/logo.jpg"
+    col1, col2, col3, col4, col5 = st.columns([1, 2, 2, 2, 1])
+    with col3:
+        st.image(logo_path, width=200)
     st.markdown("<h1 style='text-align: center; color: #2C3E50;'>Innovative Data Sharing Platform</h1>", unsafe_allow_html=True)
-    st.markdown(
-        """
-        <p style="text-align: center; font-size:18px; color:#555;">
-        <em>Empowering banks and institutional clients with secure, transparent, and personalized data sharing</em>
-        </p>
-        """,
-        unsafe_allow_html=True)
     
+    # La parte "Hello and welcome" è stata rimossa dalla Title Page.
     st.markdown("---")
+    st.markdown('<div class="big-button" style="text-align: center;">', unsafe_allow_html=True)
+    st.write(" ")
+    col1, col2, col3, col4, col5, col6 = st.columns([1, 2, 2, 3, 3, 1])
+    with col4:
+        # Il pulsante ora porta alla Start Page
+        if st.button("Start Now"):
+            go_to("start_page")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+def start_page():
+    st.write("Before starting, please scan the QR Code to enjoy the experience with us.")
+    logo_path = "/Users/aurora.ambrosoni/Desktop/logo.jpg"
+    col1, col2, col3, col4, col5 = st.columns([1, 2, 2, 2, 1])
+    with col3:
+        st.image(logo_path, width=200)
+    
+    st.write(" ")
+    st.write(" ")
+    st.write(" ")
+    st.write(" ")
+    #####to put QR Code image !!!
+    col1, col2, col3, col4, col5, col6 = st.columns([1, 2, 2, 3, 2, 1])
+    with col4:
+        # Il pulsante ora porta alla Start Page
+        if st.button("Start Next"):
+            go_to("hub")
+    st.markdown('</div>', unsafe_allow_html=True)
+def hub_page():
+    # Non viene renderizzata la top nav qui
     st.markdown(
         """
-        <h2 style="text-align:center; color:#34495E;">Hello and welcome!</h2>
-        <p style="text-align:center; font-size:16px; color:#555;">
+        <h2 style='text-align:center; color:#34495E;'>Hello and welcome!</h2>
+        <p style='text-align:center; font-size:16px; color:#555;'>
         Welcome to our innovative platform—redefining how banks share data with institutional clients through secure, transparent methods and advanced machine learning for personalized investment insights.
         </p>
         """,
         unsafe_allow_html=True
     )
-    st.markdown("---")
-    st.write("")
-    st.write("")
-    # Big Start button (using custom CSS)
-    st.markdown('<div class="big-button" style="text-align: center;">', unsafe_allow_html=True)
+    st.write(" ")
+    st.markdown("### What we provide:")
+    st.markdown(
+        """
+        <div style="text-align: center;">
+            <ul style="list-style-type: disc; display: inline-block; text-align: left;">
+                <li><strong>Safety:</strong> We prioritize robust security measures including encryption, CAPTCHA verification, and secure data sharing protocols to protect your sensitive information.</li>
+                <li><strong>Personalization:</strong> Our platform is tailored to your unique investment goals and risk appetite, ensuring a customized experience that meets your specific needs.</li>
+                <li><strong>Advanced Machine Learning:</strong> By leveraging state-of-the-art machine learning algorithms, we deliver predictive insights and data-driven strategies for optimal decision-making.</li>
+                <li><strong>Transparency:</strong> We uphold complete transparency with clear audit logs and open data practices, building trust and accountability in every interaction.</li>
+            </ul>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+    # Pulsante Next che porta alla Captcha Page
+    st.write(" ")
+    st.write(" ")
+    st.write(" ")
     col1, col2, col3, col4, col5, col6 = st.columns([1, 2, 2, 3, 2, 1])
     with col4:
-        if st.button("Start"):
+        if st.button("Next"):
             go_to("captcha")
-    st.markdown('</div>', unsafe_allow_html=True)
 
 def captcha_page():
-    st.header("CAPTCHA Verification")
+    st.subheader("CAPTCHA Verification")
     if "captcha" not in st.session_state:
          st.session_state.captcha = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
     st.write("Please type the text below to verify you are human:")
     st.markdown(f"<h2 style='color:#E67E22;'>{st.session_state.captcha}</h2>", unsafe_allow_html=True)
     user_input = st.text_input("Enter CAPTCHA", key="captcha_input")
     
-    # Only show the Verify button if not yet verified
-    if not st.session_state.verified:
-         if st.button("Verify"):
-              if user_input == st.session_state.captcha:
-                   st.success("Verification successful!")
-                   st.session_state.verified = True
-              else:
-                   st.error("Incorrect CAPTCHA. Please try again.")
-                   st.session_state.captcha = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
-    # Once verified, show a Login button to proceed
-    if st.session_state.verified:
-         if st.button("Login"):
-              go_to("hub")
-
-def hub_page():
-    st.header("Dashboard")
-    st.write("Welcome to the main hub. Use the navigation bar above to access different sections of the platform.")
+    # Se la verifica ha successo, l'utente viene indirizzato all'Onboarding.
+    st.write(" ")
+    st.write(" ")
+    st.write(" ")
+    col1, col2, col3, col4, col5, col6 = st.columns([1, 2, 2, 3, 2, 1])
+    with col4:
+        if st.button("Verify"):
+            if user_input == st.session_state.captcha:
+                st.success("Verification successful!")
+                st.session_state.verified = True
+                go_to("onboarding")
+            else:
+                st.error("Incorrect CAPTCHA. Please try again.")
+                st.session_state.captcha = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
 
 def onboarding_page():
     st.header("Client Onboarding & Personalization")
@@ -329,23 +402,12 @@ def onboarding_page():
     
     st.info(f"Welcome, **{user_name}**! You prefer **{investment_goal}** strategies over a **{time_horizon}-year** horizon.")
     
-    # Generate Private Equity asset data
     data = generate_pe_asset_data()
-    
-    dp = st.checkbox("Apply Differential Privacy to Data")
-    if dp:
-        epsilon = st.slider("Set privacy parameter (epsilon)", 0.1, 2.0, 1.0, step=0.1)
-        data = apply_differential_privacy(data, epsilon)
-        st.warning("Differential privacy applied: Data has added noise for privacy protection.")
-    
     st.subheader("PE Asset Overview")
-    col1, col2 = st.columns(2)
-    with col1:
-        n_clusters = st.slider("Number of Clusters", 2, 6, 3, key="clusters")
-        clustered_data, kmeans_model = run_clustering(data.copy(), n_clusters)
-        st.pyplot(plot_clustering(clustered_data, kmeans_model, n_clusters))
-    with col2:
-        st.pyplot(plot_average_risk(clustered_data))
+    clustered_data, kmeans_model, optimal_k = run_clustering_auto(data.copy())
+    st.write(f"Optimal number of clusters determined: **{optimal_k}**")
+    st.pyplot(plot_clustering(clustered_data, kmeans_model, optimal_k))
+    st.pyplot(plot_average_risk(clustered_data))
     
     col3, col4 = st.columns(2)
     with col3:
@@ -358,8 +420,9 @@ def onboarding_page():
 
 def analysis_page():
     st.header("Advanced Analysis & PE Insights")
-    st.write("Select a predictive model and simulate market stress to forecast IRR. This analysis demonstrates how data sharing can drive informed decision-making for institutional clients.")
-    model_choice = st.radio("Select Model", ("Random Forest", "Gradient Boosting"))
+    st.write("Simulate market conditions and forecast IRR using our predictive model. This analysis demonstrates how data sharing can drive informed decision-making for institutional clients.")
+    
+    model_choice = "Random Forest"
     
     if "risk_appetite" not in st.session_state:
         st.session_state.risk_appetite = 5
@@ -374,16 +437,36 @@ def analysis_page():
     with col2:
         st.pyplot(plot_feature_importance(model, model_type=model_choice))
     
+    st.subheader("Residual Analysis")
+    st.pyplot(plot_residuals(data, y_pred))
+    
+    st.subheader("Feature Correlation")
+    st.pyplot(plot_correlation_heatmap(data))
+    
+    if st.button("Next: Review"):
+        go_to("review")
+
+def review_page():
+    st.header("Review: Stress Testing & Insights")
+    st.write("In this section, you can perform a stress test of the model and view the predicted IRR in real time.")
+    
+    # Generate data and train the model (always using Random Forest)
+    data = generate_pe_asset_data()
+    model, _ = train_pe_model(data, model_type="Random Forest")
+    
     st.subheader("Stress Testing & Personalized Prediction")
-    user_vol = st.slider("Set Base Volatility (%) for Prediction", 10.0, 40.0, 25.0, step=0.5, key="analysis_vol")
+    user_vol = st.slider("Set Base Volatility (%) for Prediction", 10.0, 40.0, 25.0, step=0.5, key="review_vol")
     shock_factor = st.slider("Market Shock Factor", 1.0, 3.0, 1.0, step=0.1)
     adjusted_vol = user_vol * shock_factor
-    risk_rating_input = st.session_state.risk_appetite * 2  # Adjust mapping for PE view
+    risk_rating_input = st.session_state.risk_appetite * 2  # Mapping for Private Equity
     moic_input = 1 + (10 - st.session_state.risk_appetite) / 10 * 3  # Scale from 1 to 4
     input_features = np.array([[adjusted_vol, risk_rating_input, moic_input]])
     predicted_irr = model.predict(input_features)[0]
+    
     st.write(f"At an adjusted volatility of **{adjusted_vol:.1f}%**, risk input **{risk_rating_input:.1f}**, and MOIC **{moic_input:.1f}**,")
     st.success(f"the predicted IRR is **{predicted_irr:.2f}%**")
+    
+    st.markdown("<h3 style='color:#E67E22; text-align:center;'>The numbers don't lie: invest smartly for a brighter tomorrow!</h3>", unsafe_allow_html=True)
     
     if st.button("Next: Code Overview"):
         go_to("code_overview")
@@ -416,7 +499,6 @@ def conclusion_page():
     st.write("**Key Features:**")
     st.markdown("""
     - **Enhanced Security:** CAPTCHA verification, simulated blockchain audit logs, and robust encryption demo.  
-    - **Privacy Protection:** Differential privacy mechanisms ensure sensitive financial data remains confidential.  
     - **Personalization:** Onboarding inputs tailor the platform to client-specific investment strategies.  
     - **Advanced Analytics:** Clustering, predictive modeling, and stress testing provide deep insights into Private Equity assets.
     """)
@@ -435,18 +517,35 @@ def conclusion_page():
     
     if st.button("Restart"):
         go_to("title")
+    
+    # Aggiungi il tasto Next che porta alla pagina Thank You
+    if st.button("Next"):
+        go_to("thank_you")
+
+
+def thank_you_page():
+    # Mostra una scritta gigante Thank You
+    st.write(" ")
+    st.write(" ")
+    st.write(" ")
+    st.write(" ")
+    st.write(" ")
+    st.markdown("<h1 style='text-align: center; font-size: 64px;'>THANK YOU!</h1>", unsafe_allow_html=True)
+
 
 # =============================================================================
 # Main App Logic
 # =============================================================================
 
 def main():
-    # For all pages after the captcha, render the top navigation bar instead of a sidebar
-    if st.session_state.page not in ["title", "captcha"]:
+    # Non renderizzare la top nav nelle pagine: title, start_page e hub
+    if st.session_state.page not in ["title", "start_page", "hub", "captcha", "thank_you"]:
          render_top_nav()
          
     if st.session_state.page == "title":
          title_page()
+    elif st.session_state.page == "start_page":
+         start_page()
     elif st.session_state.page == "captcha":
          captcha_page()
     elif st.session_state.page == "hub":
@@ -455,10 +554,14 @@ def main():
          onboarding_page()
     elif st.session_state.page == "analysis":
          analysis_page()
+    elif st.session_state.page == "review":
+         review_page()
     elif st.session_state.page == "code_overview":
          code_overview_page()
     elif st.session_state.page == "conclusion":
          conclusion_page()
+    elif st.session_state.page == "thank_you":
+        thank_you_page()
 
 if __name__ == "__main__":
     main()
