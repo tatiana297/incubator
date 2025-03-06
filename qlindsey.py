@@ -289,7 +289,7 @@ def render_top_nav():
 # =============================================================================
 
 def title_page():
-    logo_path = "/Users/aurora.ambrosoni/Desktop/logo.jpg"
+    logo_path = logo_path = "logo.jpg"
     col1, col2, col3, col4, col5 = st.columns([1, 2, 2, 2, 1])
     with col3:
         st.image(logo_path, width=200)
