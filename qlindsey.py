@@ -251,7 +251,7 @@ def render_top_nav():
 
 def title_page():
     # Display logo and welcome text
-    logo_path = "/Users/lindseyandrade/Desktop/logo.jpg"
+    logo_path = logo_path = "logo.jpg"
     st.image(logo_path, width=150)
     st.markdown("<h1 style='text-align: center; color: #2C3E50;'>Innovative Data Sharing Platform</h1>", unsafe_allow_html=True)
     st.markdown(
