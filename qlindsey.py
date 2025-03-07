@@ -311,7 +311,7 @@ def start_page():
     qr_path = qr_path = "qrcode.png"
     col1, col2, col3, col4, col5 = st.columns([1, 2, 2, 2, 1])
     with col3:
-        st.image(logo_path, width=200)
+        st.image(qr_path, width=200)
     
     st.write(" ")
     st.write(" ")
