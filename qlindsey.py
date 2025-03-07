@@ -308,7 +308,7 @@ def title_page():
 
 def start_page():
     st.write("Before starting, please scan the QR Code to enjoy the experience with us.")
-    logo_path = logo_path = "qrcode.png"
+    qr_path = qr_path = "qrcode.png"
     col1, col2, col3, col4, col5 = st.columns([1, 2, 2, 2, 1])
     with col3:
         st.image(logo_path, width=200)
